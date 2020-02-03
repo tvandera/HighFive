@@ -21,9 +21,12 @@ HighFive does not require an additional library and supports both HDF5 thread sa
 
 
 ### Dependencies
+- hdf5 (dev)
+- hdf5-mpi (optional, opt-in with -D*DHIGHFIVE_PARALLEL_HDF5*=ON)
+- boost >= 1.41 (recommended, opt-out with -D*DHIGHFIVE_USE_BOOST*=OFF)
+- eigen3 (optional, opt-in with -D*HIGHFIVE_USE_EIGEN*=ON)
+- xtensor (optional, opt-in with -D*HIGHFIVE_USE_XTENSOR*=ON)
 
-- libhdf5
-- boost >= 1.41 (optional, disable in CMake using `-DUSE_BOOST=FALSE`)
 
 ### CMake integration
 
@@ -36,14 +39,9 @@ cmake_minimum_required(VERSION 3.0 FATAL_ERROR)
 project(foo)
 set(CMAKE_CXX_STANDARD 11)
 
-find_package(HighFive 2.0 REQUIRED)
+find_package(HighFive 2.1 REQUIRED)
 add_executable(bar bar.cpp)
-target_include_directories(
-  bar
-  PUBLIC $<TARGET_PROPERTY:HighFive,INTERFACE_INCLUDE_DIRECTORIES>)
-target_link_libraries(
-  bar
-  PUBLIC $<TARGET_PROPERTY:HighFive,INTERFACE_LINK_LIBRARIES>)
+target_link_libraries(bar HighFive)
 ```
 
 ### Usage
@@ -104,16 +102,16 @@ c++ -o program -I/path/to/highfive/include source.cpp  -lhdf5
 
 #### H5Easy
 
-For several 'standard' use cases the [HighFive/H5Easy.hpp](include/HighFive/H5Easy.hpp) interface is available. It allows:
+For several 'standard' use cases the [highfive/H5Easy.hpp](include/highfive/H5Easy.hpp) interface is available. It allows:
 
 *   Reading/writing in a single line of:
 
     -   scalars (to/from an extendible DataSet),
     -   strings,
     -   vectors (of standard types),
-    -   [Eigen::Matrix](http://eigen.tuxfamily.org) (optional, enable CMake option `USE_EIGEN`),
+    -   [Eigen::Matrix](http://eigen.tuxfamily.org) (optional, enable CMake option `HIGHFIVE_USE_EIGEN`),
     -   [xt::xarray](https://github.com/QuantStack/xtensor) and [xt::xtensor](https://github.com/QuantStack/xtensor)
-        (optional, enable CMake option `USE_XTENSOR`).
+        (optional, enable CMake option `HIGHFIVE_USE_XTENSOR`).
 
 *   Getting in a single line:
 
@@ -123,7 +121,7 @@ For several 'standard' use cases the [HighFive/H5Easy.hpp](include/HighFive/H5Ea
 The general idea is to 
 
 ```cpp
-#include <HighFive/H5Easy.hpp>
+#include <highfive/H5Easy.hpp>
 
 int main()
 {
@@ -143,6 +141,7 @@ whereby the `int` type of this example can be replaced by any of the above types
 
 ### Test Compilation
 Remember: Compilation is not required. Used only for unit test and examples
+Unit tests need boost (*USE_BOOST*).
 
 ```bash
 mkdir build; pushd build
@@ -153,7 +152,7 @@ make test
 
 ### Feature support
 
-- create/read/write file,  dataset, group, dataspace.
+- create/read/write file, dataset, group, dataspace.
 - automatic memory management / ref counting
 - automatic conversion of `std::vector` and nested `std::vector` from/to any dataset with basic types
 - automatic conversion of `std::string` to/from variable length string dataset
@@ -171,6 +170,7 @@ make test
 - Tristan Carel <tristan.carel@epfl.ch> - Blue Brain Project
 - Wolf Vollprecht <w.vollprecht@gmail.com> - QuantStack
 - Tom de Geus <tom@geus.me> - EPFL
+- Nicolas Cornu <nicolas.cornu@epfl.ch> - Blue Brain Project
 
 ### License
 

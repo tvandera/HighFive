@@ -131,7 +131,6 @@ inline std::vector<size_t> DataSpace::getMaxDimensions() const {
 template <typename ScalarValue>
 inline DataSpace DataSpace::From(const ScalarValue& scalar) {
     (void)scalar;
-#if H5_USE_CXX11
     static_assert(
         (std::is_arithmetic<ScalarValue>::value ||
          std::is_enum<ScalarValue>::value ||
@@ -147,8 +146,8 @@ inline DataSpace DataSpace::From(const ScalarValue& scalar) {
         "boost::numeric::ublas::matrix<all_basic_types> | "
         "boost::multi_array<all_basic_types> \n"
         "  all_supported_types = all_basic_types | stl_container_types | "
-        "boost_container_types");
-#endif
+        "boost_container_types"
+        "  eigen_matrix_type = Eigen::Matrix<signed_arithmetic_type> | Eigen::VectorXX");
     return DataSpace(DataSpace::datascape_scalar);
 }
 
@@ -169,10 +168,7 @@ inline DataSpace DataSpace::From(const std::array<Value, N>& ) {
 template <typename Value, std::size_t Dims>
 inline DataSpace
 DataSpace::From(const boost::multi_array<Value, Dims>& container) {
-    std::vector<size_t> dims(Dims);
-    for (std::size_t i = 0; i < Dims; ++i) {
-        dims[i] = container.shape()[i];
-    }
+    std::vector<size_t> dims(container.shape(), container.shape() + Dims);
     return DataSpace(dims);
 }
 
@@ -184,6 +180,37 @@ DataSpace::From(const boost::numeric::ublas::matrix<Value>& mat) {
     dims[1] = mat.size2();
     return DataSpace(dims);
 }
+#endif
+
+#ifdef H5_USE_EIGEN
+template <typename Value, int M, int N>
+inline DataSpace
+DataSpace::From(const Eigen::Matrix<Value, M, N>&  mat ) {
+    std::vector<size_t> dims{static_cast<size_t>(mat.rows()), static_cast<size_t>(mat.cols())};
+    return DataSpace(dims);
+}
+
+template <typename Value, int M, int N>
+inline DataSpace
+DataSpace::From(const std::vector<Eigen::Matrix<Value, M, N>>& vec) {
+    std::vector<size_t> dims{std::accumulate(vec.begin(),
+                                             vec.end(),
+                                             size_t{0u},
+                                             [](size_t so_far, const auto& v) {
+                                                 return so_far + static_cast<size_t>(v.rows());
+                                             }),
+                             static_cast<size_t>(vec[0].cols())};
+    return DataSpace(dims);
+}
+
+#ifdef H5_USE_BOOST
+template <typename Value, int M, int N, size_t Dims>
+inline DataSpace DataSpace::From(const boost::multi_array<Eigen::Matrix<Value, M, N>, Dims>& vec) {
+    std::vector<size_t> dims(vec.shape(), vec.shape() + Dims);
+    dims[Dims - 1] *= static_cast<size_t>(vec.origin()->rows() * vec.origin()->cols());
+    return DataSpace(dims);
+}
+#endif
 
 #endif
 
