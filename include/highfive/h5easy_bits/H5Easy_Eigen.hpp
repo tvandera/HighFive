@@ -22,42 +22,37 @@ namespace detail {
 namespace eigen {
 
 // return the shape of the "Eigen::Matrix" as size 1 or 2 "std::vector<size_t>"
-template <class C, int Rows, int Cols, int Options, int MaxRows, int MaxCols>
-inline std::vector<size_t> shape(const Eigen::Matrix<C,Rows,Cols,Options,MaxRows,MaxCols>& data)
-{
-    if (Rows == 1) {
+template <class T>
+inline std::vector<size_t> shape(const T& data) {
+    if (std::decay<T>::type::RowsAtCompileTime == 1) {
         return {static_cast<size_t>(data.cols())};
     }
-
-    if (Cols == 1) {
+    if (std::decay<T>::type::ColsAtCompileTime == 1) {
         return {static_cast<size_t>(data.rows())};
     }
-
     return {static_cast<size_t>(data.rows()),
             static_cast<size_t>(data.cols())};
 }
 
+
+using EigenIndex = Eigen::DenseIndex;
+
 // get the shape of a "DataSet" as size 2 "std::vector<Eigen::Index>"
-inline std::vector<Eigen::Index> shape(const File& file,
-                                       const std::string& path,
-                                       const DataSet& dataset,
-                                       int RowsAtCompileTime)
-{
+inline std::vector<EigenIndex> shape(const File& file,
+                                     const std::string& path,
+                                     const DataSet& dataset,
+                                     int RowsAtCompileTime) {
     std::vector<size_t> dims = dataset.getDimensions();
 
     if (dims.size() == 1 && RowsAtCompileTime == 1) {
-        return std::vector<Eigen::Index>{1u,
-                                         static_cast<Eigen::Index>(dims[0])};
+        return std::vector<EigenIndex>{1u, static_cast<EigenIndex>(dims[0])};
     }
-
     if (dims.size() == 1) {
-        return std::vector<Eigen::Index>{static_cast<Eigen::Index>(dims[0]),
-                                         1u};
+        return std::vector<EigenIndex>{static_cast<EigenIndex>(dims[0]), 1u};
     }
-
     if (dims.size() == 2) {
-        return std::vector<Eigen::Index>{static_cast<Eigen::Index>(dims[0]),
-                                         static_cast<Eigen::Index>(dims[1])};
+        return std::vector<EigenIndex>{static_cast<EigenIndex>(dims[0]),
+                                       static_cast<EigenIndex>(dims[1])};
     }
 
     throw detail::error(file, path, "H5Easy::load: Inconsistent rank");
@@ -65,69 +60,52 @@ inline std::vector<Eigen::Index> shape(const File& file,
 
 // write to open DataSet of the correct size
 // (use Eigen::Ref to convert to RowMajor; no action if no conversion is needed)
-template <class C, int Rows, int Cols, int Options, int MaxRows, int MaxCols>
-inline void write(DataSet& dataset,
-                  const Eigen::Matrix<C,Rows,Cols,Options,MaxRows,MaxCols>& data)
-{
+template <class T>
+inline void write(DataSet& dataset, const T& data) {
     Eigen::Ref<
         const Eigen::Matrix<
-            C,
-            Rows,
-            Cols,
-            Cols==1?Eigen::ColMajor:Eigen::RowMajor,
-            MaxRows,
-            MaxCols>,
+            typename std::decay<T>::type::Scalar,
+            std::decay<T>::type::RowsAtCompileTime,
+            std::decay<T>::type::ColsAtCompileTime,
+            std::decay<T>::type::ColsAtCompileTime==1 ? Eigen::ColMajor : Eigen::RowMajor,
+            std::decay<T>::type::MaxRowsAtCompileTime,
+            std::decay<T>::type::MaxColsAtCompileTime>,
         0,
         Eigen::InnerStride<1>> row_major(data);
 
-    dataset.write(row_major.data());
+    dataset.write_raw(row_major.data());
 }
 
 // create DataSet and write data
 template <class T>
-struct dump_impl
-{
-    template <class C, int Rows, int Cols, int Options, int MaxRows, int MaxCols>
-    static DataSet run(File& file,
-                       const std::string& path,
-                       const Eigen::Matrix<C,Rows,Cols,Options,MaxRows,MaxCols>& data)
-    {
-        detail::createGroupsToDataSet(file, path);
-        DataSet dataset = file.createDataSet<C>(path, DataSpace(shape(data)));
-        detail::eigen::write(dataset, data);
-        file.flush();
-        return dataset;
-    }
-};
+static DataSet dump_impl(File& file, const std::string& path, const T& data) {
+    using value_type = typename std::decay<T>::type::Scalar;
+    detail::createGroupsToDataSet(file, path);
+    DataSet dataset = file.createDataSet<value_type>(path, DataSpace(shape(data)));
+    detail::eigen::write(dataset, data);
+    file.flush();
+    return dataset;
+}
 
 // replace data of an existing DataSet of the correct size
 template <class T>
-struct overwrite_impl
-{
-    template <class C, int Rows, int Cols, int Options, int MaxRows, int MaxCols>
-    static DataSet run(File& file,
-                       const std::string& path,
-                       const Eigen::Matrix<C,Rows,Cols,Options,MaxRows,MaxCols>& data)
-    {
-        DataSet dataset = file.getDataSet(path);
-        if (dataset.getDimensions() != shape(data)) {
-            throw detail::error(file, path, "H5Easy::dump: Inconsistent dimensions");
-        }
-        detail::eigen::write(dataset, data);
-        file.flush();
-        return dataset;
+static DataSet overwrite_impl(File& file, const std::string& path, const T& data) {
+    DataSet dataset = file.getDataSet(path);
+    if (dataset.getDimensions() != shape(data)) {
+        throw detail::error(file, path, "H5Easy::dump: Inconsistent dimensions");
     }
-};
+    detail::eigen::write(dataset, data);
+    file.flush();
+    return dataset;
+}
 
 // load from DataSet
 // convert to ColMajor if needed (HDF5 always stores row-major)
 template <class T>
-struct load_impl
-{
-    static T run(const File& file, const std::string& path)
-    {
+struct load_impl {
+    static T run(const File& file, const std::string& path) {
         DataSet dataset = file.getDataSet(path);
-        std::vector<Eigen::Index> dims = shape(file, path, dataset, T::RowsAtCompileTime);
+        std::vector<typename T::Index> dims = shape(file, path, dataset, T::RowsAtCompileTime);
         T data(dims[0], dims[1]);
         dataset.read(data.data());
 
@@ -145,12 +123,23 @@ struct load_impl
     }
 };
 
+// universal front-end (to minimise double code)
+template <class T>
+inline DataSet dump(File& file, const std::string& path, const T& data, DumpMode mode) {
+    if (!file.exist(path)) {
+        return detail::eigen::dump_impl(file, path, data);
+    } else if (mode == DumpMode::Overwrite) {
+        return detail::eigen::overwrite_impl(file, path, data);
+    } else {
+        throw detail::error(file, path, "H5Easy: path already exists");
+    }
+}
+
 }  // namespace eigen
 
 // front-end
 template <class T, int Rows, int Cols, int Options, int MaxRows, int MaxCols>
-struct load_impl<Eigen::Matrix<T,Rows,Cols,Options,MaxRows,MaxCols>>
-{
+struct load_impl<Eigen::Matrix<T,Rows,Cols,Options,MaxRows,MaxCols>> {
     static Eigen::Matrix<T,Rows,Cols,Options,MaxRows,MaxCols>
     run(const File& file,
         const std::string& path)
@@ -167,17 +156,26 @@ template <class T, int Rows, int Cols, int Options, int MaxRows, int MaxCols>
 inline DataSet dump(File& file,
                     const std::string& path,
                     const Eigen::Matrix<T,Rows,Cols,Options,MaxRows,MaxCols>& data,
-                    DumpMode mode)
-{
-    if (!file.exist(path)) {
-        return detail::eigen::dump_impl<
-            Eigen::Matrix<T,Rows,Cols,Options,MaxRows,MaxCols>>::run(file, path, data);
-    } else if (mode == DumpMode::Overwrite) {
-        return detail::eigen::overwrite_impl<
-            Eigen::Matrix<T,Rows,Cols,Options,MaxRows,MaxCols>>::run(file, path, data);
-    } else {
-        throw detail::error(file, path, "H5Easy: path already exists");
-    }
+                    DumpMode mode) {
+    return detail::eigen::dump(file, path, data, mode);
+}
+
+// front-end
+template <class T>
+inline DataSet dump(File& file,
+                    const std::string& path,
+                    const Eigen::Ref<T>& data,
+                    DumpMode mode) {
+    return detail::eigen::dump(file, path, data, mode);
+}
+
+// front-end
+template <class T>
+inline DataSet dump(File& file,
+                    const std::string& path,
+                    const Eigen::Map<T>& data,
+                    DumpMode mode) {
+    return detail::eigen::dump(file, path, data, mode);
 }
 
 }  // namespace H5Easy

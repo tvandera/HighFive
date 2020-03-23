@@ -52,9 +52,11 @@ inline DataSet
 NodeTraits<Derivate>::createDataSet(const std::string& dataset_name,
                                     const DataSpace& space,
                                     const DataSetCreateProps& createProps,
-                                    const DataSetAccessProps& accessProps) {
-    return createDataSet(dataset_name, space, AtomicType<Type>(), createProps,
-                         accessProps);
+                                    const DataSetAccessProps& accessProps)
+{
+    return createDataSet(dataset_name, space,
+                         create_and_check_datatype<Type>(),
+                         createProps, accessProps);
 }
 
 template <typename Derivate>
@@ -66,8 +68,21 @@ NodeTraits<Derivate>::createDataSet(const std::string& dataset_name,
                                     const DataSetAccessProps& accessProps) {
     DataSet ds = createDataSet(
         dataset_name, DataSpace::From(data),
-        AtomicType<typename details::type_of_array<T>::type>(), createProps,
-        accessProps);
+        create_and_check_datatype<typename details::type_of_array<T>::type>(),
+        createProps, accessProps);
+    ds.write(data);
+    return ds;
+}
+
+template <typename Derivate>
+template <std::size_t N>
+inline DataSet
+NodeTraits<Derivate>::createDataSet(const std::string& dataset_name,
+                                    const FixedLenStringArray<N>& data,
+                                    const DataSetCreateProps& createProps,
+                                    const DataSetAccessProps& accessProps) {
+    DataSet ds = createDataSet<char[N]>(
+        dataset_name, DataSpace(data.size()), createProps, accessProps);
     ds.write(data);
     return ds;
 }
@@ -166,22 +181,23 @@ inline std::vector<std::string> NodeTraits<Derivate>::listObjectNames() const {
 }
 
 template <typename Derivate>
-inline bool NodeTraits<Derivate>::_exist(const std::string& node_name) const {
-    htri_t val = H5Lexists(static_cast<const Derivate*>(this)->getId(),
-                           node_name.c_str(), H5P_DEFAULT);
-
+inline bool NodeTraits<Derivate>::_exist(const std::string& node_name,
+                                         bool raise_errors) const {
+    SilenceHDF5 silencer{raise_errors};
+    const auto val = H5Lexists(static_cast<const Derivate*>(this)->getId(),
+                               node_name.c_str(), H5P_DEFAULT);
     if (val < 0) {
-        HDF5ErrMapper::ToException<GroupException>(
-            std::string("Invalid link for exist() "));
+        if (raise_errors) {
+            HDF5ErrMapper::ToException<GroupException>("Invalid link for exist()");
+        } else {
+            return false;
+        }
     }
 
     // The root path always exists, but H5Lexists return 0 or 1
     // depending of the version of HDF5, so always return true for it
-    // We should call H5Lexists anyway to check that no error is returned
-    if (node_name == "/")
-        return true;
-
-    return (val > 0);
+    // We had to call H5Lexists anyway to check that there are no errors
+    return (node_name == "/") ? true : (val > 0);
 }
 
 template <typename Derivate>
@@ -190,12 +206,8 @@ inline bool NodeTraits<Derivate>::exist(const std::string& group_path) const {
     // so that subsequent errors are only due to missing intermediate groups
     if (group_path.find('/') != std::string::npos) {
         _exist("/");  // Shall not throw under normal circumstances
-        try {
-            SilenceHDF5 silencer;
-            return _exist(group_path);
-        } catch (const GroupException&) {
-            return false;
-        }
+        // Unless "/" (already checked), verify path exists (not thowing errors)
+        return (group_path == "/") ? true : _exist(group_path, false);
     }
     return _exist(group_path);
 }
@@ -203,9 +215,8 @@ inline bool NodeTraits<Derivate>::exist(const std::string& group_path) const {
 
 template <typename Derivate>
 inline void NodeTraits<Derivate>::unlink(const std::string& node_name) const {
-    htri_t val = H5Ldelete(static_cast<const Derivate*>(this)->getId(),
-                           node_name.c_str(), H5P_DEFAULT);
-
+    const herr_t val = H5Ldelete(static_cast<const Derivate*>(this)->getId(),
+                                 node_name.c_str(), H5P_DEFAULT);
     if (val < 0) {
         HDF5ErrMapper::ToException<GroupException>(
             std::string("Invalid name for unlink() "));

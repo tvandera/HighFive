@@ -26,21 +26,26 @@ class Selection : public SliceTraits<Selection> {
     /// \brief getSpace
     /// \return Dataspace associated with this selection
     ///
-    DataSpace getSpace() const;
+    DataSpace getSpace() const noexcept;
 
     ///
     /// \brief getMemSpace
     /// \return Dataspace associated with the memory representation of this
     /// selection
     ///
-    DataSpace getMemSpace() const;
+    DataSpace getMemSpace() const noexcept;
 
     ///
     /// \brief getDataSet
     /// \return parent dataset of this selection
     ///
-    DataSet& getDataset();
-    const DataSet& getDataset() const;
+    DataSet& getDataset() noexcept;
+    const DataSet& getDataset() const noexcept;
+
+    ///
+    /// \brief return the datatype of the selection
+    /// \return return the datatype of the selection
+    const DataType getDataType() const;
 
   private:
     Selection(const DataSpace& memspace, const DataSpace& file_space,
@@ -53,7 +58,8 @@ class Selection : public SliceTraits<Selection> {
     friend class ::HighFive::SliceTraits;
     // absolute namespace naming due to GCC bug 52625
 };
-}
+
+}  // namespace HighFive
 
 #include "bits/H5Slice_traits_misc.hpp"
 #include "bits/H5Selection_misc.hpp"

@@ -23,17 +23,18 @@
 #endif
 
 #include "H5Object.hpp"
+#include "bits/H5_definitions.hpp"
 
 namespace HighFive {
-
-class File;
-class DataSet;
 
 ///
 /// \brief Class representing the space (dimensions) of a dataset
 ///
 class DataSpace : public Object {
   public:
+
+    const static ObjectType type = ObjectType::DataSpace;
+
 
     static const size_t UNLIMITED = SIZE_MAX;
 
@@ -54,7 +55,7 @@ class DataSpace : public Object {
     /// Make sure that DataSpace({1,2,3}) works on GCC. This is
     /// the shortcut form of the vector initializer, but one some compilers (gcc)
     /// this does not resolve correctly without this constructor.
-    explicit DataSpace(std::initializer_list<size_t> items);
+    DataSpace(const std::initializer_list<size_t>& items);
 
     /// Allow directly listing 1 or more dimensions to initialize,
     /// that is, DataSpace(1,2) means DataSpace(std::vector<size_t>{1,2}).
@@ -115,13 +116,18 @@ class DataSpace : public Object {
     ///  - vector of std::string
     ///  - boost::multi_array (with H5_USE_BOOST defined)
     template <typename Value>
-    static DataSpace From(const std::vector<Value>& vec);
+    static DataSpace From(const std::vector<Value>& container);
 
     /// Create a dataspace matching the container dimensions for a
     /// std::array.
     template <typename Value, std::size_t N>
     static DataSpace From(const std::array<Value, N>&);
 
+    template <typename ValueT, std::size_t N>
+    static DataSpace From(const ValueT(&container)[N]);
+
+    template <std::size_t N, std::size_t Width>
+    static DataSpace FromCharArrayStrings(const char(&)[N][Width]);
 
 #ifdef H5_USE_BOOST
     template <typename Value, std::size_t Dims>

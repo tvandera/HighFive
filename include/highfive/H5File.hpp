@@ -25,6 +25,9 @@ class File : public Object,
              public NodeTraits<File>,
              public AnnotateTraits<File> {
  public:
+
+    const static ObjectType type = ObjectType::File;
+
     enum : unsigned {
         /// Open flag: Read only access
         ReadOnly = 0x00u,
@@ -57,7 +60,7 @@ class File : public Object,
     ///
     /// \brief Return the name of the file
     ///
-    const std::string& getName() const;
+    const std::string& getName() const noexcept;
 
     ///
     /// \brief flush

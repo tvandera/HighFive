@@ -43,11 +43,13 @@ inline Object::~Object() {
     }
 }
 
-inline bool Object::isValid() const {
+inline bool Object::isValid() const noexcept {
     return (_hid != H5I_INVALID_HID) && (H5Iis_valid(_hid) != false);
 }
 
-inline hid_t Object::getId() const { return _hid; }
+inline hid_t Object::getId() const noexcept {
+    return _hid;
+}
 
 static inline ObjectType _convert_object_type(const H5I_type_t& h5type) {
     switch (h5type) {
@@ -79,7 +81,11 @@ inline ObjectType Object::getType() const {
 
 inline ObjectInfo Object::getInfo() const {
     ObjectInfo info;
+#if (H5Oget_info_vers < 3)
     if (H5Oget_info(_hid, &info.raw_info) < 0) {
+#else
+    if (H5Oget_info1(_hid, &info.raw_info) < 0) {
+#endif
         HDF5ErrMapper::ToException<ObjectException>("Unable to obtain info for object");
     }
     return info;

@@ -23,13 +23,12 @@ namespace HighFive {
 inline DataSpace::DataSpace(const std::vector<size_t>& dims)
     : DataSpace(dims.begin(), dims.end()) {}
 
-inline DataSpace::DataSpace(std::initializer_list<size_t> items)
+inline DataSpace::DataSpace(const std::initializer_list<size_t>& items)
     : DataSpace(std::vector<size_t>(items)) {}
 
 template<typename... Args>
     inline DataSpace::DataSpace(size_t dim1, Args... dims)
-    : DataSpace(std::vector<size_t>{static_cast<size_t>(dim1),
-                                    static_cast<size_t>(dims)...}){}
+    : DataSpace(std::vector<size_t>{dim1, static_cast<size_t>(dims)...}) {}
 
 template <class IT, typename>
 inline DataSpace::DataSpace(const IT begin, const IT end) {
@@ -80,7 +79,7 @@ inline DataSpace::DataSpace(DataSpace::DataspaceType dtype) {
     }
 }
 
-inline DataSpace::DataSpace() {}
+inline DataSpace::DataSpace() = default;
 
 inline DataSpace DataSpace::clone() const {
     DataSpace res;
@@ -101,7 +100,7 @@ inline size_t DataSpace::getNumberDimensions() const {
 
 inline std::vector<size_t> DataSpace::getDimensions() const {
     std::vector<hsize_t> dims(getNumberDimensions());
-    if (dims.size() > 0) {
+    if (!dims.empty()) {
         if (H5Sget_simple_extent_dims(_hid, dims.data(), NULL) < 0) {
             HDF5ErrMapper::ToException<DataSetException>(
                 "Unable to get dataspace dimensions");
@@ -111,7 +110,7 @@ inline std::vector<size_t> DataSpace::getDimensions() const {
 }
 
 inline size_t DataSpace::getElementCount() const {
-    std::vector<size_t> dims = getDimensions();
+    const std::vector<size_t>& dims = getDimensions();
     return std::accumulate(dims.begin(), dims.end(), size_t{1u},
                            std::multiplies<size_t>());
 }
@@ -156,12 +155,20 @@ inline DataSpace DataSpace::From(const std::vector<Value>& container) {
     return DataSpace(details::get_dim_vector<Value>(container));
 }
 
+template <typename ValueT, std::size_t N>
+inline DataSpace DataSpace::From(const ValueT(&container)[N]) {
+    return DataSpace(details::get_dim_vector(container));
+}
+
+template <std::size_t N, std::size_t Width>
+inline DataSpace DataSpace::FromCharArrayStrings(const char(&)[N][Width]) {
+    return DataSpace(N);
+}
+
 /// Currently only supports 1D std::array
 template <typename Value, std::size_t N>
 inline DataSpace DataSpace::From(const std::array<Value, N>& ) {
-    std::vector<size_t> dims;
-    dims.push_back(N);
-    return DataSpace(dims);
+    return DataSpace(N);
 }
 
 #ifdef H5_USE_BOOST
@@ -186,26 +193,28 @@ DataSpace::From(const boost::numeric::ublas::matrix<Value>& mat) {
 template <typename Value, int M, int N>
 inline DataSpace
 DataSpace::From(const Eigen::Matrix<Value, M, N>&  mat ) {
-    std::vector<size_t> dims{static_cast<size_t>(mat.rows()), static_cast<size_t>(mat.cols())};
+    std::vector<size_t> dims{static_cast<size_t>(mat.rows()),
+                             static_cast<size_t>(mat.cols())};
     return DataSpace(dims);
 }
 
 template <typename Value, int M, int N>
 inline DataSpace
 DataSpace::From(const std::vector<Eigen::Matrix<Value, M, N>>& vec) {
-    std::vector<size_t> dims{std::accumulate(vec.begin(),
-                                             vec.end(),
-                                             size_t{0u},
-                                             [](size_t so_far, const auto& v) {
-                                                 return so_far + static_cast<size_t>(v.rows());
-                                             }),
-                             static_cast<size_t>(vec[0].cols())};
+    using elem_t = Eigen::Matrix<Value, M, N>;
+    std::vector<size_t> dims{
+        std::accumulate(vec.begin(), vec.end(), size_t{0u},
+                        [](size_t so_far, const elem_t& v) {
+                            return so_far + static_cast<size_t>(v.rows());
+                        }),
+        static_cast<size_t>(vec[0].cols())};
     return DataSpace(dims);
 }
 
 #ifdef H5_USE_BOOST
 template <typename Value, int M, int N, size_t Dims>
-inline DataSpace DataSpace::From(const boost::multi_array<Eigen::Matrix<Value, M, N>, Dims>& vec) {
+inline DataSpace DataSpace::
+From(const boost::multi_array<Eigen::Matrix<Value, M, N>, Dims>& vec) {
     std::vector<size_t> dims(vec.shape(), vec.shape() + Dims);
     dims[Dims - 1] *= static_cast<size_t>(vec.origin()->rows() * vec.origin()->cols());
     return DataSpace(dims);
@@ -222,17 +231,15 @@ inline bool checkDimensions(const DataSpace& mem_space, size_t input_dims) {
     if (input_dims == dataset_dims)
         return true;
 
-    const std::vector<size_t> dims = mem_space.getDimensions();
-    for (std::vector<size_t>::const_reverse_iterator i = dims.rbegin();
-         i != --dims.rend() && *i == 1; ++i)
+    const std::vector<size_t>& dims = mem_space.getDimensions();
+    for (auto i = dims.crbegin(); i != --dims.crend() && *i == 1; ++i)
         --dataset_dims;
 
     if (input_dims == dataset_dims)
         return true;
 
     dataset_dims = dims.size();
-    for (std::vector<size_t>::const_iterator i = dims.begin();
-         i != --dims.end() && *i == 1; ++i)
+    for (auto i = dims.cbegin(); i != --dims.cend() && *i == 1; ++i)
         --dataset_dims;
 
     if (input_dims == dataset_dims)
